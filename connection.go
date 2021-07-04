@@ -116,7 +116,6 @@ func (connection *Connection) sendPong(conn net.Conn, data []byte) {
 // receiveMessage is handling all incoming input
 // keeps track broken connections
 func (connection *Connection) receiveMessage(conn net.Conn) {
-	if connection.listener == nil { return }
 	frame := frame{}
 	connection.Ready(conn)
 	buffer := make([]byte, 0x2000)
