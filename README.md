@@ -1,13 +1,6 @@
-<div align="center">
-    <h1>
-            <a href="https://github.com/Vinz1911/network-go"><img src="https://github.com/Vinz1911/network-go/blob/main/.network.svg" alt="Network-GO" width="300"></a>
-        <br>
-        <br>
-            Network-GO
-    </h1>
-</div>
+# Fusion
 
-`Network-GO` is a library which implements the `NWC-Protocol`. The `NWC-Protocol` is proprietary networking protocol which uses a small and lightweight header with a performance as fast as raw tcp performance.
+`Fusion` is a library which implements the `NWC-Protocol`. The `NWC-Protocol` is proprietary networking protocol which uses a small and lightweight header with a performance as fast as raw tcp performance.
 Built directly on top of Go's `net.Listener` with support for plain tcp and tls encrypted connections. 
 The implementation for the Client is [NetworKit](https://github.com/Vinz1911/networkit) written in swift on top of `Network.framework` to ensure maximum performance.
 
@@ -24,7 +17,7 @@ The implementation for the Client is [NetworKit](https://github.com/Vinz1911/net
 ## Import:
 ```go
 // import the framework
-import "github.com/Vinz1911/network-go"
+import "github.com/Vinz1911/fusion/network"
 
 // create a new connection listener
 listener := network.Listener{}
