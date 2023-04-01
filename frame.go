@@ -38,11 +38,9 @@ const (
 func (*frame) create(data []byte, opcode uint8) (message []byte, err error) {
 	if uint32(len(data)) > frameByteCount - overheadByteCount { return nil, errors.New(writeBufferOverflow) }
 	var frame []byte
-	var length = make([]byte, 0x4)
-	binary.BigEndian.PutUint32(length, uint32(len(data)) + overheadByteCount)
+	var length = make([]byte, 0x4); binary.BigEndian.PutUint32(length, uint32(len(data)) + overheadByteCount)
 	frame = append(frame, opcode)
-	frame = append(frame, length...)
-	hash := sha256.Sum256(frame[:controlByteCount])
+	frame = append(frame, length...); hash := sha256.Sum256(frame[:controlByteCount])
 	frame = append(frame, hash[:]...)
 	frame = append(frame, data...)
 	return frame, nil
