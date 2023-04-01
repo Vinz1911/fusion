@@ -1,3 +1,3 @@
-module github.com/Vinz1911/network-go
+module github.com/Vinz1911/fusion
 
 go 1.16
