@@ -1,10 +1,10 @@
-// Package network
+//  Fusion
+//
+//  Created by Vinzenz Weist on 17.06.21.
+//  Copyright © 2021 Vinzenz Weist. All rights reserved.
+//
 
-// Copyright 2021 Vinzenz Weist. All rights reserved.
-// Use of this source code is risked by yourself.
-// license that can be found in the LICENSE file.
-
-package main
+package network
 
 import (
 	"crypto/sha256"
@@ -20,10 +20,10 @@ type frame struct {
 }
 
 const (
-	opcodeByteCount  uint32 = 0x1
-	controlByteCount uint32 = 0x5
+	opcodeByteCount   uint32 = 0x1
+	controlByteCount  uint32 = 0x5
 	overheadByteCount uint32 = 0x25
-	frameByteCount uint32 = 0xFFFFFFFF
+	frameByteCount    uint32 = 0xFFFFFFFF
 )
 
 const (
