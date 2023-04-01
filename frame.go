@@ -40,7 +40,7 @@ func (*frame) create(data []byte, opcode uint8) (message []byte, err error) {
 	var frame []byte
 	var length = make([]byte, 0x4); binary.BigEndian.PutUint32(length, uint32(len(data)) + overheadByteCount)
 	frame = append(frame, opcode)
-	frame = append(frame, length...); hash := sha256.Sum256(frame[:controlByteCount])
+	frame = append(frame, length...); var hash = sha256.Sum256(frame[:controlByteCount])
 	frame = append(frame, hash[:]...)
 	frame = append(frame, data...)
 	return frame, nil
@@ -50,18 +50,18 @@ func (*frame) create(data []byte, opcode uint8) (message []byte, err error) {
 // returns parsed data as 'Data' or 'String'
 func (frame *frame) parse(data []byte, completion func(text *string, data []byte, ping []byte)) error {
 	frame.buffer = append(frame.buffer, data...)
-	length := frame.extractSize()
+	var length = frame.extractSize()
 	if length == nil { return nil }
 	if uint32(len(frame.buffer)) > frameByteCount { return errors.New(readBufferOverflow) }
 	if uint32(len(frame.buffer)) < overheadByteCount { return nil }
 	if len(frame.buffer) < *length { return nil }
 	for len(frame.buffer) >= *length && *length != 0 {
-		digest := sha256.Sum256(frame.buffer[:controlByteCount])
+		var digest = sha256.Sum256(frame.buffer[:controlByteCount])
 		if hex.EncodeToString(digest[:]) != *frame.extractHash() { return errors.New(hashMismatch) }
-		bytes, err := frame.extractMessage(frame.buffer)
+		var bytes, err = frame.extractMessage(frame.buffer)
 		if err != nil { return err }
 		switch frame.buffer[0] {
-		case TextMessage: result := string(bytes); completion(&result, nil, nil)
+		case TextMessage: var result = string(bytes); completion(&result, nil, nil)
 		case BinaryMessage: completion(nil, bytes, nil)
 		case PingMessage: completion(nil, nil, bytes)
 		default: return errors.New(parsingFailed) }
@@ -76,8 +76,8 @@ func (frame *frame) parse(data []byte, completion func(text *string, data []byte
 // if not possible it returns nil
 func (frame *frame) extractHash() *string {
 	if uint32(len(frame.buffer)) < overheadByteCount { return nil }
-	hash := frame.buffer[controlByteCount:overheadByteCount]
-	digest := hex.EncodeToString(hash[:])
+	var hash = frame.buffer[controlByteCount:overheadByteCount]
+	var digest = hex.EncodeToString(hash[:])
 	return &digest
 }
 
@@ -85,8 +85,8 @@ func (frame *frame) extractHash() *string {
 // if not possible it returns zero
 func (frame *frame) extractSize() *int {
 	if uint32(len(frame.buffer)) < overheadByteCount { return nil }
-	size := frame.buffer[opcodeByteCount:controlByteCount]
-	length := int(binary.BigEndian.Uint32(size))
+	var size = frame.buffer[opcodeByteCount:controlByteCount]
+	var length = int(binary.BigEndian.Uint32(size))
 	return &length
 }
 
@@ -94,7 +94,7 @@ func (frame *frame) extractSize() *int {
 // if not possible it returns nil
 func (frame *frame) extractMessage(data []byte) (message []byte, err error) {
 	if uint32(len(data)) < overheadByteCount { return nil, errors.New(parsingFailed) }
-	length := frame.extractSize()
+	var length = frame.extractSize()
 	if length == nil { return nil, errors.New(parsingFailed) }
 	if uint32(*length) < overheadByteCount { return nil, errors.New(parsingFailed) }
 	return data[overheadByteCount:*length], nil

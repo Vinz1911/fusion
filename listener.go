@@ -47,15 +47,15 @@ func (listener *Listener) Start(parameter uint8, port uint16) error {
 		listener.listener, err = net.Listen("tcp", ":" + strconv.Itoa(int(port)))
 		if err != nil { return err }
 	case TLSConnection:
-		cer, err := tls.LoadX509KeyPair(listener.Cert, listener.Key)
+		var cer, err = tls.LoadX509KeyPair(listener.Cert, listener.Key)
 		if err != nil { return err }
-		config := &tls.Config{Certificates: []tls.Certificate{cer}}
+		var config = &tls.Config{Certificates: []tls.Certificate{cer}}
 		listener.listener, err = tls.Listen("tcp", ":" + strconv.Itoa(int(port)), config)
 		if err != nil { return err }
 	}
 	defer listener.listener.Close()
 	for {
-		conn, err := listener.listener.Accept()
+		var conn, err = listener.listener.Accept()
 		if err != nil { return err }
 		go listener.receiveMessage(conn)
 	}
@@ -65,7 +65,7 @@ func (listener *Listener) Start(parameter uint8, port uint16) error {
 // the listener from accepting new connections
 func (listener *Listener) Cancel() {
 	if listener.listener == nil { return }
-	err := listener.listener.Close()
+	var err = listener.listener.Close()
 	if err != nil { listener.Failed(nil, err) }
 	listener.listener = nil
 }
@@ -85,7 +85,7 @@ func (listener *Listener) SendBinaryMessage(conn net.Conn, data []byte) {
 // create and send message frame
 func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint8) {
 	if listener.listener == nil { return }
-	message, err := listener.frame.create(data, opcode)
+	var message, err = listener.frame.create(data, opcode)
 	if err != nil { listener.Failed(conn, err); listener.remove(conn) }
 	_, err = conn.Write(message)
 	if err != nil { listener.Failed(conn, err) }
@@ -94,7 +94,7 @@ func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint
 // parse a message frame
 func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []byte) error {
 	if listener.listener == nil { return errors.New(parsingFailed) }
-	err := frame.parse(data, func(text *string, data []byte, ping []byte) {
+	var err = frame.parse(data, func(text *string, data []byte, ping []byte) {
 		listener.Message(conn, text, data)
 		if ping != nil { listener.sendPong(conn, ping) }
 	})
@@ -103,7 +103,7 @@ func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []by
 
 // remove is for terminating a specific connection
 func (listener *Listener) remove(conn net.Conn) {
-	err := conn.Close()
+	var err = conn.Close()
 	if err != nil { listener.Failed(conn, err) }
 	listener.Cancelled(conn)
 }
@@ -116,11 +116,11 @@ func (listener *Listener) sendPong(conn net.Conn, data []byte) {
 // receiveMessage is handling all incoming input
 // keeps track broken connections
 func (listener *Listener) receiveMessage(conn net.Conn) {
-	frame := frame{}
+	var frame = frame{}
 	listener.Ready(conn)
-	buffer := make([]byte, 0x2000)
+	var buffer = make([]byte, 0x2000)
 	for {
-		size, err := conn.Read(buffer)
+		var size, err = conn.Read(buffer)
 		if err != nil { if err == io.EOF { listener.Cancelled(conn) } else { listener.Failed(conn, err) }; break }
 		err = listener.processingParse(conn, &frame, buffer[:size])
 		if err != nil { listener.Failed(conn, err); listener.remove(conn); break }
