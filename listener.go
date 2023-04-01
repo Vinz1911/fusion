@@ -1,10 +1,10 @@
-// Package network
+// Package main
 
 // Copyright 2021 Vinzenz Weist. All rights reserved.
 // Use of this source code is risked by yourself.
 // license that can be found in the LICENSE file.
 
-package network
+package main
 
 import (
 	"crypto/tls"
@@ -15,27 +15,27 @@ import (
 )
 
 const (
-	TCPConnection 	uint8 = 0x0
-	TLSConnection 	uint8 = 0x1
+	TCPConnection uint8 = 0x0
+	TLSConnection uint8 = 0x1
 
-	TextMessage 	uint8 = 0x1
-	BinaryMessage 	uint8 = 0x2
-	PingMessage		uint8 = 0x3
+	TextMessage   uint8 = 0x1
+	BinaryMessage uint8 = 0x2
+	PingMessage   uint8 = 0x3
 )
 
-// Listener is a a tcp based connection listener
+// Listener is a tcp based connection listener
 // this is for handling incoming pure tcp connections
 type Listener struct {
-	frame    	frame
-	listener 	net.Listener
+	frame    frame
+	listener net.Listener
 
-	Cert 		string
-	Key			string
+	Cert string
+	Key  string
 
-	Ready 		func(conn net.Conn)
-	Message 	func(conn net.Conn, text *string, binary []byte)
-	Failed    	func(conn net.Conn, err error)
-	Cancelled 	func(conn net.Conn)
+	Ready     func(conn net.Conn)
+	Message   func(conn net.Conn, text *string, binary []byte)
+	Failed    func(conn net.Conn, err error)
+	Cancelled func(conn net.Conn)
 }
 
 // Start the NetworkGO connection listener
@@ -45,7 +45,7 @@ func (listener *Listener) Start(parameter uint8, port uint16) error {
 	case TCPConnection:
 		var err error
 		listener.listener, err = net.Listen("tcp", ":" + strconv.Itoa(int(port)))
-		if err != nil { return  err }
+		if err != nil { return err }
 	case TLSConnection:
 		cer, err := tls.LoadX509KeyPair(listener.Cert, listener.Key)
 		if err != nil { return err }
