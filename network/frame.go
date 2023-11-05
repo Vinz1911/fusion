@@ -24,7 +24,6 @@ const (
 )
 
 const (
-	hashMismatch        string = "message hash does not match"
 	parsingFailed       string = "message parsing failed"
 	readBufferOverflow  string = "read buffer overflow"
 	writeBufferOverflow string = "write buffer overflow"

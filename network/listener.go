@@ -23,6 +23,10 @@ const (
 	PingMessage   uint8 = 0x3
 )
 
+const (
+	maximum uint32 = 0x8000
+)
+
 // Listener is a tcp based connection listener
 // this is for handling incoming pure tcp connections
 type Listener struct {
@@ -70,14 +74,9 @@ func (listener *Listener) Cancel() {
 	listener.listener = nil
 }
 
-// SendTextMessage is for sending a text based message
-func (listener *Listener) SendTextMessage(conn net.Conn, str string) {
-	listener.processingSend(conn, []byte(str), TextMessage)
-}
-
-// SendBinaryMessage is for sending a text based message
-func (listener *Listener) SendBinaryMessage(conn net.Conn, data []byte) {
-	listener.processingSend(conn, data, BinaryMessage)
+// SendMessage is for sending messages
+func (listener *Listener) SendMessage(conn net.Conn, messageType uint8, data []byte) {
+	listener.processingSend(conn, data, messageType)
 }
 
 /// MARK: - Private API
@@ -92,7 +91,7 @@ func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint
 }
 
 // parse a message frame
-func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []byte) error {
+func (listener *Listener) processingParse(conn net.Conn, frame frame, data []byte) error {
 	if listener.listener == nil { return errors.New(parsingFailed) }
 	var err = frame.parse(data, func(text *string, data []byte, ping []byte) {
 		listener.Message(conn, text, data)
@@ -118,11 +117,11 @@ func (listener *Listener) sendPong(conn net.Conn, data []byte) {
 func (listener *Listener) receiveMessage(conn net.Conn) {
 	var frame = frame{}
 	listener.Ready(conn)
-	var buffer = make([]byte, 0x2000)
+	var buffer = make([]byte, maximum)
 	for {
 		var size, err = conn.Read(buffer)
 		if err != nil { if err == io.EOF { listener.Cancelled(conn) } else { listener.Failed(conn, err) }; break }
-		err = listener.processingParse(conn, &frame, buffer[:size])
+		err = listener.processingParse(conn, frame, buffer[:size])
 		if err != nil { listener.Failed(conn, err); listener.remove(conn); break }
 	}
 }
