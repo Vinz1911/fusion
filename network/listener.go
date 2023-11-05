@@ -91,7 +91,7 @@ func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint
 }
 
 // parse a message frame
-func (listener *Listener) processingParse(conn net.Conn, frame frame, data []byte) error {
+func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []byte) error {
 	if listener.listener == nil { return errors.New(parsingFailed) }
 	var err = frame.parse(data, func(text *string, data []byte, ping []byte) {
 		listener.Message(conn, text, data)
@@ -121,7 +121,7 @@ func (listener *Listener) receiveMessage(conn net.Conn) {
 	for {
 		var size, err = conn.Read(buffer)
 		if err != nil { if err == io.EOF { listener.Cancelled(conn) } else { listener.Failed(conn, err) }; break }
-		err = listener.processingParse(conn, frame, buffer[:size])
+		err = listener.processingParse(conn, &frame, buffer[:size])
 		if err != nil { listener.Failed(conn, err); listener.remove(conn); break }
 	}
 }
