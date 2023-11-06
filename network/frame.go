@@ -24,9 +24,10 @@ const (
 )
 
 const (
-	parsingFailed       string = "message parsing failed"
-	readBufferOverflow  string = "read buffer overflow"
-	writeBufferOverflow string = "write buffer overflow"
+	parsingFailed       	string = "message parsing failed"
+	readBufferOverflow  	string = "read buffer overflow"
+	writeBufferOverflow 	string = "write buffer overflow"
+	sizeExtractionFailed	string = "size extraction failed"
 )
 
 // create is for creating compliant message frames
@@ -45,41 +46,32 @@ func (*frame) create(data []byte, opcode uint8) (message []byte, err error) {
 // returns parsed data as 'Data' or 'String'
 func (frame *frame) parse(data []byte, completion func(text *string, data []byte, ping []byte)) error {
 	frame.buffer = append(frame.buffer, data...)
-	var length = frame.extractSize()
-	if length == nil { return nil }
-	if uint32(len(frame.buffer)) > frameByteCount { return errors.New(readBufferOverflow) }
-	if uint32(len(frame.buffer)) < controlByteCount { return nil }
-	if len(frame.buffer) < *length { return nil }
-	for len(frame.buffer) >= *length && *length != 0 {
-		var bytes, err = frame.extractMessage(frame.buffer)
-		if err != nil { return err }
+	var length, err = frame.extractSize(); if err != nil { return nil }
+	if len(frame.buffer) > int(frameByteCount) { return errors.New(readBufferOverflow) }
+	if len(frame.buffer) < int(controlByteCount) { return nil }; if len(frame.buffer) < length { return nil }
+	for len(frame.buffer) >= length && length != 0 {
+		var bytes, err = frame.extractMessage(length); if err != nil { return err }
 		switch frame.buffer[0] {
 		case TextMessage: var result = string(bytes); completion(&result, nil, nil)
 		case BinaryMessage: completion(nil, bytes, nil)
 		case PingMessage: completion(nil, nil, bytes)
 		default: return errors.New(parsingFailed) }
-		if len(frame.buffer) <= *length { frame.buffer = []byte{} } else { frame.buffer = frame.buffer[*length:] }
-	}
-	return nil
+		if len(frame.buffer) <= length { frame.buffer = []byte{} } else { frame.buffer = frame.buffer[length:] }
+	}; return nil
 }
-
-// MARK: - Private API -
 
 // extract the message frame size from the data
 // if not possible it returns zero
-func (frame *frame) extractSize() *int {
-	if uint32(len(frame.buffer)) < controlByteCount { return nil }
+func (frame *frame) extractSize() (length int, err error) {
+	if len(frame.buffer) < int(controlByteCount) { return 0x0, errors.New(sizeExtractionFailed) }
 	var size = frame.buffer[opcodeByteCount:controlByteCount]
-	var length = int(binary.BigEndian.Uint32(size))
-	return &length
+	return int(binary.BigEndian.Uint32(size)), nil
 }
 
 // extract the message and remove the overhead
 // if not possible it returns nil
-func (frame *frame) extractMessage(data []byte) (message []byte, err error) {
-	if uint32(len(data)) < controlByteCount { return nil, errors.New(parsingFailed) }
-	var length = frame.extractSize()
-	if length == nil { return nil, errors.New(parsingFailed) }
-	if uint32(*length) < controlByteCount { return nil, errors.New(parsingFailed) }
-	return data[controlByteCount:*length], nil
+func (frame *frame) extractMessage(length int) (message []byte, err error) {
+	if len(frame.buffer) < int(controlByteCount) { return nil, errors.New(parsingFailed) }
+	if length < int(controlByteCount) { return nil, errors.New(parsingFailed) }
+	return frame.buffer[controlByteCount:length], nil
 }
