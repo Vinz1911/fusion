@@ -43,8 +43,8 @@ func (*frame) create(data []byte, opcode uint8) (message []byte, err error) {
 }
 
 // parse is for parsing data back into compliant messages
-// returns parsed data as 'Data' or 'String'
-func (frame *frame) parse(data []byte, completion func(text *string, data []byte, ping []byte)) error {
+// returns parsed data as '[]Byte' or 'String'
+func (frame *frame) parse(data []byte, completion func(data []byte, opcode uint8)) error {
 	frame.buffer = append(frame.buffer, data...)
 	var length, err = frame.extractSize(); if err != nil { return nil }
 	if len(frame.buffer) > int(frameByteCount) { return errors.New(readBufferOverflow) }
@@ -52,9 +52,9 @@ func (frame *frame) parse(data []byte, completion func(text *string, data []byte
 	for len(frame.buffer) >= length && length != 0 {
 		var bytes, err = frame.extractMessage(length); if err != nil { return err }
 		switch frame.buffer[0] {
-		case TextMessage: var result = string(bytes); completion(&result, nil, nil)
-		case BinaryMessage: completion(nil, bytes, nil)
-		case PingMessage: completion(nil, nil, bytes)
+		case TextMessage: completion(bytes, TextMessage)
+		case BinaryMessage: completion(bytes, BinaryMessage)
+		case PingMessage: completion(bytes, PingMessage)
 		default: return errors.New(parsingFailed) }
 		if len(frame.buffer) <= length { frame.buffer = []byte{} } else { frame.buffer = frame.buffer[length:] }
 	}; return nil

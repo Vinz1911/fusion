@@ -37,29 +37,28 @@ type Listener struct {
 	Key  string
 
 	Ready     func(conn net.Conn)
-	Message   func(conn net.Conn, text *string, binary []byte)
+	Message   func(conn net.Conn, data []byte, opcode uint8)
 	Failed    func(conn net.Conn, err error)
 	Cancelled func(conn net.Conn)
 }
 
 // Start the NetworkGO connection listener
 // waits for incoming connections
-func (listener *Listener) Start(parameter uint8, port uint16) error {
+func (listener *Listener) Start(parameter uint8, port uint16) (err error) {
 	switch parameter {
 	case TCPConnection:
-		var err error
 		listener.listener, err = net.Listen("tcp", ":" + strconv.Itoa(int(port)))
 		if err != nil { return err }
 	case TLSConnection:
-		var cer, err = tls.LoadX509KeyPair(listener.Cert, listener.Key)
+		var cer tls.Certificate; cer, err = tls.LoadX509KeyPair(listener.Cert, listener.Key)
 		if err != nil { return err }
 		var config = &tls.Config{Certificates: []tls.Certificate{cer}}
 		listener.listener, err = tls.Listen("tcp", ":" + strconv.Itoa(int(port)), config)
 		if err != nil { return err }
 	}
-	defer listener.listener.Close()
+	defer func() { if closed := listener.listener.Close(); closed != nil && err == nil { err = closed } }()
 	for {
-		var conn, err = listener.listener.Accept()
+		var conn net.Conn; conn, err = listener.listener.Accept()
 		if err != nil { return err }
 		go listener.receiveMessage(conn)
 	}
@@ -79,8 +78,6 @@ func (listener *Listener) SendMessage(conn net.Conn, messageType uint8, data []b
 	listener.processingSend(conn, data, messageType)
 }
 
-/// MARK: - Private API
-
 // create and send message frame
 func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint8) {
 	if listener.listener == nil { return }
@@ -93,9 +90,9 @@ func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint
 // parse a message frame
 func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []byte) error {
 	if listener.listener == nil { return errors.New(parsingFailed) }
-	var err = frame.parse(data, func(text *string, data []byte, ping []byte) {
-		listener.Message(conn, text, data)
-		if ping != nil { listener.sendPong(conn, ping) }
+	var err = frame.parse(data, func(data []byte, opcode uint8) {
+		listener.Message(conn, data, opcode)
+		if opcode == PingMessage { listener.sendPong(conn, data) }
 	})
 	return err
 }

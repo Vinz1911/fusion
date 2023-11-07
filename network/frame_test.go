@@ -13,9 +13,9 @@ func TestFramerText(test *testing.T) {
 	var bytesBlock []byte
 	data, err := frame.create([]byte(message), TextMessage)
 	if err != nil { test.Errorf("parsing failed") }
-	for i := 0; i < 1000; i++ { bytesBlock = append(bytesBlock, data...) }
-	err = frame.parse(bytesBlock, func(text *string, data []byte, ping []byte) {
-		if text != nil { if *text != message { test.Errorf("parsing failed") } }
+	for i := 0; i < 10000; i++ { bytesBlock = append(bytesBlock, data...) }
+	err = frame.parse(bytesBlock, func(data []byte, opcode uint8) {
+		if opcode == TextMessage { if string(data) != message { test.Errorf("parsing failed") } }
 	})
 	if err != nil { test.Errorf("parsing failed") }
 }
@@ -28,9 +28,9 @@ func TestFramerBinary(test *testing.T) {
 	var bytesBlock []byte
 	data, err := frame.create(message, BinaryMessage)
 	if err != nil { test.Errorf("parsing failed") }
-	for i := 0; i < 1000; i++ { bytesBlock = append(bytesBlock, data...) }
-	err = frame.parse(bytesBlock, func(text *string, binary []byte, ping []byte) {
-		if binary != nil { if !bytes.Equal(binary, message) { test.Errorf("parsing failed") } }
+	for i := 0; i < 10000; i++ { bytesBlock = append(bytesBlock, data...) }
+	err = frame.parse(bytesBlock, func(data []byte, opcode uint8) {
+		if opcode != BinaryMessage { if !bytes.Equal(data, message) { test.Errorf("parsing failed") } }
 	})
 	if err != nil { test.Errorf("parsing failed") }
 }
