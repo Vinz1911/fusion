@@ -20,7 +20,7 @@ const (
 
 	TextMessage   uint8 = 0x1
 	BinaryMessage uint8 = 0x2
-	PingMessage   uint8 = 0x3
+	pingMessage   uint8 = 0x3
 )
 
 const (
@@ -92,7 +92,7 @@ func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []by
 	if listener.listener == nil { return errors.New(parsingFailed) }
 	var err = frame.parse(data, func(data []byte, opcode uint8) {
 		listener.Message(conn, data, opcode)
-		if opcode == PingMessage { listener.sendPong(conn, data) }
+		if opcode == pingMessage { listener.processingSend(conn, data, pingMessage) }
 	})
 	return err
 }
@@ -102,11 +102,6 @@ func (listener *Listener) remove(conn net.Conn) {
 	var err = conn.Close()
 	if err != nil { listener.Failed(conn, err) }
 	listener.Cancelled(conn)
-}
-
-// sendPong is for sending a pong based message
-func (listener *Listener) sendPong(conn net.Conn, data []byte) {
-	listener.processingSend(conn, data, PingMessage)
 }
 
 // receiveMessage is handling all incoming input

@@ -54,7 +54,7 @@ func (frame *frame) parse(data []byte, completion func(data []byte, opcode uint8
 		switch frame.buffer[0] {
 		case TextMessage: completion(bytes, TextMessage)
 		case BinaryMessage: completion(bytes, BinaryMessage)
-		case PingMessage: completion(bytes, PingMessage)
+		case pingMessage: completion(bytes, pingMessage)
 		default: return errors.New(parsingFailed) }
 		if len(frame.buffer) <= length { frame.buffer = []byte{} } else { frame.buffer = frame.buffer[length:] }
 	}; return nil
