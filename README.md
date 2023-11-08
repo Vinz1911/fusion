@@ -1,6 +1,7 @@
 # Fusion
 
-`Fusion` is a library which implements the `NWC-Protocol`. The `NWC-Protocol` is proprietary networking protocol which uses a small and lightweight header with a performance as fast as raw tcp performance.
+`Fusion` is a library which implements the `Fusion Framing Protocol (FFP)`. 
+The `Fusion Framing Protocol (FFP)` is proprietary networking protocol which uses a small and lightweight header with a performance as fast as raw tcp performance. 
 Built directly on top of Go's `net.Listener` with support for plain tcp and tls encrypted connections. 
 The implementation for the Client is [FusionKit](https://github.com/Vinz1911/fusionkit) written in swift on top of `Network.framework` to ensure maximum performance.
 
@@ -34,11 +35,11 @@ listener := network.Listener{}
 listener.Ready = func(socket net.Conn) { }
 
 // listener received message from a connection
-listener.Message = func(conn net.Conn, text *string, binary []byte) {
+listener.Message = func(conn net.Conn, binary []byte, opcode uint8) {
 	// message is text based
-    if text != nil { }
+    if opcode == network.TextMessage { println(string(binary)) }
     // message is binary based
-    if binary != nil { }
+    if binary == network.BinaryMessage { println(len(binary)) }
 }
 
 // listener connection failed
@@ -48,7 +49,7 @@ listener.Failed = func(conn net.Conn, err error) { }
 listener.Cancelled = func(conn net.Conn) { }
 
 // start listener
-err := listener.Start(network.TCPConnection, uint16(8080))
+err := listener.Start(network.TCPConnection, uint16(7878))
 ```
 
 ## Author:
