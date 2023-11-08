@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// TestFramerText is for testing the frame creator and parser
-// includes testing for multiple message extraction from single byte buffer
+// TestFramerText is for testing the frame creator and parser.
+// Includes testing for multiple message extractions from single byte buffer.
 func TestFramerText(test *testing.T) {
 	frame := frame{}
 	message := "Hello World!"
@@ -20,8 +20,8 @@ func TestFramerText(test *testing.T) {
 	if err != nil { test.Errorf("parsing failed") }
 }
 
-// TestFramerBinary is for testing the frame creator and parser
-// includes testing for multiple message extraction from single byte buffer
+// TestFramerBinary is for testing the frame creator and parser.
+// Includes testing for multiple message extractions from single byte buffer.
 func TestFramerBinary(test *testing.T) {
 	frame := frame{}
 	message := []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
