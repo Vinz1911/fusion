@@ -53,13 +53,13 @@ type Listener struct {
 func (listener *Listener) Start(parameter uint8, port uint16) (err error) {
 	switch parameter {
 	case TCPConnection:
-		listener.listener, err = net.Listen("tcp", ":" + strconv.Itoa(int(port)))
+		listener.listener, err = net.Listen("tcp6", ":" + strconv.Itoa(int(port)))
 		if err != nil { return err }
 	case TLSConnection:
 		var cer tls.Certificate; cer, err = tls.LoadX509KeyPair(listener.Cert, listener.Key)
 		if err != nil { return err }
 		var config = &tls.Config{Certificates: []tls.Certificate{cer}}
-		listener.listener, err = tls.Listen("tcp", ":" + strconv.Itoa(int(port)), config)
+		listener.listener, err = tls.Listen("tcp6", ":" + strconv.Itoa(int(port)), config)
 		if err != nil { return err }
 	}
 	defer func() { if closed := listener.listener.Close(); closed != nil && err == nil { err = closed } }()
