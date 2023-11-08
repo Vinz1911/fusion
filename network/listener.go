@@ -4,6 +4,10 @@
 //  Copyright © 2021 Vinzenz Weist. All rights reserved.
 //
 
+// Package network encapsulates the logic required to set up network connections
+// and communication, including TCP and TLS encrypted connections, along with handling
+// different types of messages such as text and binary.
+// It uses the fusion network protocol to ensuring reliability and structure.
 package network
 
 import (
@@ -14,21 +18,23 @@ import (
 	"strconv"
 )
 
+// Predefined constants for identifying connection and message types.
 const (
 	TCPConnection uint8 = 0x0
 	TLSConnection uint8 = 0x1
 
 	TextMessage   uint8 = 0x1
 	BinaryMessage uint8 = 0x2
-	pingMessage   uint8 = 0x3
 )
 
+// Private predefined constant for the maximum buffer size and pingMessage.
 const (
-	maximum uint32 = 0x8000
+	maximum 	uint32 = 0x8000
+	pingMessage uint8 = 0x3
 )
 
-// Listener is a tcp based connection listener
-// this is for handling incoming pure tcp connections
+// Listener struct represents a TCP based connection listener that handles incoming
+// pure TCP connections or TLS encrypted connections.
 type Listener struct {
 	frame    frame
 	listener net.Listener
@@ -42,8 +48,8 @@ type Listener struct {
 	Cancelled func(conn net.Conn)
 }
 
-// Start the NetworkGO connection listener
-// waits for incoming connections
+// Start initiates the listener to start accepting incoming connections on the specified port.
+// The parameter decides whether it's a TCP or TLS connection based on predefined constants.
 func (listener *Listener) Start(parameter uint8, port uint16) (err error) {
 	switch parameter {
 	case TCPConnection:
@@ -64,8 +70,7 @@ func (listener *Listener) Start(parameter uint8, port uint16) (err error) {
 	}
 }
 
-// Cancel closes all connections and stops
-// the listener from accepting new connections
+// Cancel stops the listener from accepting new connections and closes any existing ones.
 func (listener *Listener) Cancel() {
 	if listener.listener == nil { return }
 	var err = listener.listener.Close()
@@ -73,12 +78,12 @@ func (listener *Listener) Cancel() {
 	listener.listener = nil
 }
 
-// SendMessage is for sending messages
+// SendMessage sends a message through the specified connection.
 func (listener *Listener) SendMessage(conn net.Conn, messageType uint8, data []byte) {
 	listener.processingSend(conn, data, messageType)
 }
 
-// create and send message frame
+// processingSend is a helper function to create and send a message frame over a connection.
 func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint8) {
 	if listener.listener == nil { return }
 	var message, err = listener.frame.create(data, opcode)
@@ -87,7 +92,7 @@ func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint
 	if err != nil { listener.Failed(conn, err) }
 }
 
-// parse a message frame
+// processingParse is a helper function to parse a message frame from the connection data.
 func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []byte) error {
 	if listener.listener == nil { return errors.New(parsingFailed) }
 	var err = frame.parse(data, func(data []byte, opcode uint8) {
@@ -97,15 +102,14 @@ func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []by
 	return err
 }
 
-// remove is for terminating a specific connection
+// remove terminates a specific connection and triggers the Cancelled callback.
 func (listener *Listener) remove(conn net.Conn) {
 	var err = conn.Close()
 	if err != nil { listener.Failed(conn, err) }
 	listener.Cancelled(conn)
 }
 
-// receiveMessage is handling all incoming input
-// keeps track broken connections
+// receiveMessage handles all incoming data for a connection and tracks broken connections.
 func (listener *Listener) receiveMessage(conn net.Conn) {
 	var frame = frame{}
 	listener.Ready(conn)

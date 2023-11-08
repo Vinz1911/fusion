@@ -4,6 +4,9 @@
 //  Copyright © 2021 Vinzenz Weist. All rights reserved.
 //
 
+// Package network encapsulates functionalities related to network communication.
+// It provides a structure and associated methods to create and parse data frames
+// for messaging across the fusion network protocol ensuring reliability and structure.
 package network
 
 import (
@@ -11,18 +14,21 @@ import (
 	"errors"
 )
 
-// frame is message creator & parser
-// fast and reliable
+// frame is a type that encapsulates operations related to the creation and parsing
+// of message frames over the network. It aims to ensure fast and reliable communication
+// by adhering to a specified frame structure.
 type frame struct {
 	buffer []byte
 }
 
+// Predefined constants to maintain consistency in frame size and errors.
 const (
 	opcodeByteCount   uint32 = 0x1
 	controlByteCount  uint32 = 0x5
 	frameByteCount    uint32 = 0xFFFFFFFF
 )
 
+// Predefined error messages for common frame parsing issues.
 const (
 	parsingFailed       	string = "message parsing failed"
 	readBufferOverflow  	string = "read buffer overflow"
@@ -30,8 +36,9 @@ const (
 	sizeExtractionFailed	string = "size extraction failed"
 )
 
-// create is for creating compliant message frames
-// returns message as data frame
+// create is a method to construct a compliant frame for sending a message.
+// It takes in the message data and an opcode indicating the type of message.
+// It returns a slice of bytes representing the framed message or an error if the frame could not be created.
 func (*frame) create(data []byte, opcode uint8) (message []byte, err error) {
 	if uint32(len(data)) > frameByteCount - controlByteCount { return nil, errors.New(writeBufferOverflow) }
 	var frame []byte
@@ -42,8 +49,9 @@ func (*frame) create(data []byte, opcode uint8) (message []byte, err error) {
 	return frame, nil
 }
 
-// parse is for parsing data back into compliant messages
-// returns parsed data as '[]Byte' or 'String'
+// parse is a method for converting a sequence of bytes received over the network back into a structured message.
+// It appends the incoming data to the frame's buffer and attempts to extract complete messages based on the frame structure.
+// The completion callback is called with the parsed data and opcode when a message is successfully parsed.
 func (frame *frame) parse(data []byte, completion func(data []byte, opcode uint8)) error {
 	frame.buffer = append(frame.buffer, data...)
 	var length, err = frame.extractSize(); if err != nil { return nil }
@@ -60,16 +68,16 @@ func (frame *frame) parse(data []byte, completion func(data []byte, opcode uint8
 	}; return nil
 }
 
-// extract the message frame size from the data
-// if not possible it returns zero
+// extractSize attempts to determine the size of the next message in the buffer.
+// It returns the size as an integer and an error if the size cannot be determined.
 func (frame *frame) extractSize() (length int, err error) {
 	if len(frame.buffer) < int(controlByteCount) { return 0x0, errors.New(sizeExtractionFailed) }
 	var size = frame.buffer[opcodeByteCount:controlByteCount]
 	return int(binary.BigEndian.Uint32(size)), nil
 }
 
-// extract the message and remove the overhead
-// if not possible it returns nil
+// extractMessage attempts to extract the message from the frame buffer based on the input length.
+// It returns the extracted message as byte array and an error if the message cannot be extracted.
 func (frame *frame) extractMessage(length int) (message []byte, err error) {
 	if len(frame.buffer) < int(controlByteCount) { return nil, errors.New(parsingFailed) }
 	if length < int(controlByteCount) { return nil, errors.New(parsingFailed) }
