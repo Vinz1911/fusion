@@ -13,7 +13,6 @@ package network
 import (
 	"crypto/tls"
 	"errors"
-	"io"
 	"net"
 	"strconv"
 )
@@ -42,8 +41,7 @@ type Listener struct {
 
 	Ready     func(conn net.Conn)
 	Message   func(conn net.Conn, data []byte, opcode uint8)
-	Failed    func(conn net.Conn, err error)
-	Cancelled func(conn net.Conn)
+	Failed    func(err error)
 }
 
 // Start initiates the listener to start accepting incoming connections on the specified port.
@@ -54,14 +52,14 @@ func (listener *Listener) Start(parameter uint8, port uint16) (err error) {
 		listener.listener, err = net.Listen("tcp", ":" + strconv.Itoa(int(port)))
 		if err != nil { return err }
 	case TLSConnection:
+		if listener.TLSConfig == nil { return errors.New("empty tls config") }
 		listener.listener, err = tls.Listen("tcp", ":" + strconv.Itoa(int(port)), listener.TLSConfig)
 		if err != nil { return err }
 	}
 	defer func() { if closed := listener.listener.Close(); closed != nil && err == nil { err = closed } }()
 	for {
 		var conn net.Conn; conn, err = listener.listener.Accept()
-		if err != nil { return err }
-		go listener.receiveMessage(conn)
+		if err != nil { return err }; if conn != nil { go listener.receiveMessage(conn) }
 	}
 }
 
@@ -69,7 +67,7 @@ func (listener *Listener) Start(parameter uint8, port uint16) (err error) {
 func (listener *Listener) Cancel() {
 	if listener.listener == nil { return }
 	var err = listener.listener.Close()
-	if err != nil { listener.Failed(nil, err) }
+	if err != nil { if listener.Failed != nil { listener.Failed(err) } }
 	listener.listener = nil
 }
 
@@ -82,37 +80,28 @@ func (listener *Listener) SendMessage(conn net.Conn, messageType uint8, data []b
 func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint8) {
 	if listener.listener == nil { return }
 	var message, err = listener.frame.create(data, opcode)
-	if err != nil { listener.Failed(conn, err); listener.remove(conn) }
-	_, err = conn.Write(message)
-	if err != nil { listener.Failed(conn, err) }
+	if err != nil { if listener.Failed != nil { listener.Failed(err) }; if conn != nil { err = conn.Close() }; return }
+	_, err = conn.Write(message); if err != nil { if listener.Failed != nil { listener.Failed(err) } }
 }
 
 // processingParse is a helper function to parse a message frame from the connection data.
 func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []byte) error {
 	if listener.listener == nil { return errors.New(parsingFailed) }
 	var err = frame.parse(data, func(data []byte, opcode uint8) {
-		listener.Message(conn, data, opcode)
+		if conn != nil { if listener.Message != nil { listener.Message(conn, data, opcode) } }
 		if opcode == pingMessage { listener.processingSend(conn, data, pingMessage) }
 	})
 	return err
 }
 
-// remove terminates a specific connection and triggers the Cancelled callback.
-func (listener *Listener) remove(conn net.Conn) {
-	var err = conn.Close()
-	if err != nil { listener.Failed(conn, err) }
-	listener.Cancelled(conn)
-}
-
 // receiveMessage handles all incoming data for a connection and tracks broken connections.
 func (listener *Listener) receiveMessage(conn net.Conn) {
-	var frame = frame{}
-	listener.Ready(conn)
+	var frame = frame{}; if listener.Ready != nil { if conn != nil { listener.Ready(conn) } }
 	var buffer = make([]byte, maximum)
 	for {
-		var size, err = conn.Read(buffer)
-		if err != nil { if err == io.EOF { listener.Cancelled(conn) } else { listener.Failed(conn, err) }; break }
+		if conn == nil { break }; var size, err = conn.Read(buffer)
+		if err != nil { if listener.Failed != nil { listener.Failed(err) }; break }
 		err = listener.processingParse(conn, &frame, buffer[:size])
-		if err != nil { listener.Failed(conn, err); listener.remove(conn); break }
+		if err != nil { if listener.Failed != nil { listener.Failed(err) }; if conn != nil { err = conn.Close() }; break }
 	}
 }
