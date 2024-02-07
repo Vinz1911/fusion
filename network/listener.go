@@ -13,6 +13,7 @@ package network
 import (
 	"crypto/tls"
 	"errors"
+	"io"
 	"net"
 	"strconv"
 )
@@ -100,7 +101,7 @@ func (listener *Listener) receiveMessage(conn net.Conn) {
 	var buffer = make([]byte, maximum)
 	for {
 		if conn == nil { break }; var size, err = conn.Read(buffer)
-		if err != nil { if listener.Failed != nil { listener.Failed(err) }; break }
+		if err != nil { if listener.Failed != nil { if err != io.EOF { listener.Failed(err) } }; break }
 		err = listener.processingParse(conn, &frame, buffer[:size])
 		if err != nil { if listener.Failed != nil { listener.Failed(err) }; if conn != nil { err = conn.Close() }; break }
 	}
