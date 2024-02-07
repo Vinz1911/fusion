@@ -29,47 +29,42 @@ const (
 
 // Private predefined constant for the maximum buffer size and pingMessage.
 const (
-	maximum 	uint32 = 0x8000
-	pingMessage uint8 = 0x3
+	maximum     uint32 = 0x8000
+	pingMessage uint8  = 0x3
 )
 
 // Listener struct represents a TCP based connection listener that handles incoming
 // pure TCP connections or TLS encrypted connections.
 type Listener struct {
-	frame    frame
-	listener net.Listener
+	frame     frame
+	listener  net.Listener
 	TLSConfig *tls.Config
 
-	Ready     func(conn net.Conn)
-	Message   func(conn net.Conn, data []byte, opcode uint8)
-	Failed    func(err error)
+	Ready   func(conn net.Conn)
+	Message func(conn net.Conn, data []byte, opcode uint8)
+	Failed  func(err error)
 }
 
 // Start initiates the listener to start accepting incoming connections on the specified port.
 // The parameter decides whether it's a TCP or TLS connection based on predefined constants.
 func (listener *Listener) Start(parameter uint8, port uint16) (err error) {
 	switch parameter {
-	case TCPConnection:
-		listener.listener, err = net.Listen("tcp", ":" + strconv.Itoa(int(port)))
-		if err != nil { return err }
+	case TCPConnection: listener.listener, err = net.Listen("tcp", ":"+strconv.Itoa(int(port)))
 	case TLSConnection:
 		if listener.TLSConfig == nil { return errors.New("empty tls config") }
-		listener.listener, err = tls.Listen("tcp", ":" + strconv.Itoa(int(port)), listener.TLSConfig)
-		if err != nil { return err }
+		listener.listener, err = tls.Listen("tcp", ":"+strconv.Itoa(int(port)), listener.TLSConfig)
 	}
-	defer func() { if closed := listener.listener.Close(); closed != nil && err == nil { err = closed } }()
-	for {
-		var conn net.Conn; conn, err = listener.listener.Accept()
-		if err != nil { return err }; if conn != nil { go listener.receiveMessage(conn) }
-	}
+	if err != nil { return err }
+	defer listener.listener.Close()
+	for { conn, err := listener.listener.Accept(); if err != nil { return err }; go listener.receiveMessage(conn) }
 }
 
 // Cancel stops the listener from accepting new connections and closes any existing ones.
 func (listener *Listener) Cancel() {
-	if listener.listener == nil { return }
-	var err = listener.listener.Close()
-	if err != nil { if listener.Failed != nil { listener.Failed(err) } }
-	listener.listener = nil
+	if listener.listener != nil {
+		err := listener.listener.Close()
+		if err != nil && listener.Failed != nil { listener.Failed(err) }
+	}; listener.listener = nil
 }
 
 // SendMessage sends a message through the specified connection.
@@ -80,29 +75,33 @@ func (listener *Listener) SendMessage(conn net.Conn, messageType uint8, data []b
 // processingSend is a helper function to create and send a message frame over a connection.
 func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint8) {
 	if listener.listener == nil { return }
-	var message, err = listener.frame.create(data, opcode)
-	if err != nil { if listener.Failed != nil { listener.Failed(err) }; if conn != nil { err = conn.Close() }; return }
-	_, err = conn.Write(message); if err != nil { if listener.Failed != nil { listener.Failed(err) } }
+	message, err := listener.frame.create(data, opcode)
+	if err != nil {
+		if listener.Failed != nil { listener.Failed(err) }
+		if conn != nil { err = conn.Close() }; return
+	}
+	_, err = conn.Write(message)
+	if err != nil && listener.Failed != nil { listener.Failed(err) }
 }
 
 // processingParse is a helper function to parse a message frame from the connection data.
 func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []byte) error {
-	if listener.listener == nil { return errors.New(parsingFailed) }
-	var err = frame.parse(data, func(data []byte, opcode uint8) {
-		if conn != nil { if listener.Message != nil { listener.Message(conn, data, opcode) } }
+	if listener.listener == nil { return errors.New("parsing failed") }
+	err := frame.parse(data, func(data []byte, opcode uint8) {
+		if listener.Message != nil { listener.Message(conn, data, opcode) }
 		if opcode == pingMessage { listener.processingSend(conn, data, pingMessage) }
-	})
-	return err
+	}); return err
 }
 
 // receiveMessage handles all incoming data for a connection and tracks broken connections.
 func (listener *Listener) receiveMessage(conn net.Conn) {
-	var frame = frame{}; if listener.Ready != nil { if conn != nil { listener.Ready(conn) } }
-	var buffer = make([]byte, maximum)
+	defer func() { if conn != nil { conn.Close() } }()
+	if listener.Ready != nil && conn != nil { listener.Ready(conn) }
+	var frame frame; buffer := make([]byte, maximum)
 	for {
-		if conn == nil { break }; var size, err = conn.Read(buffer)
-		if err != nil { if listener.Failed != nil { if err != io.EOF { listener.Failed(err) } }; break }
+		size, err := conn.Read(buffer)
+		if err != nil { if err != io.EOF && listener.Failed != nil { listener.Failed(err) }; break }
 		err = listener.processingParse(conn, &frame, buffer[:size])
-		if err != nil { if listener.Failed != nil { listener.Failed(err) }; if conn != nil { err = conn.Close() }; break }
+		if err != nil { if listener.Failed != nil { listener.Failed(err) }; break }
 	}
 }
