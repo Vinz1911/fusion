@@ -16,6 +16,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"time"
 )
 
 // Predefined constants for identifying connection and message types.
@@ -47,16 +48,21 @@ type Listener struct {
 
 // Start initiates the listener to start accepting incoming connections on the specified port.
 // The parameter decides whether it's a TCP or TLS connection based on predefined constants.
-func (listener *Listener) Start(parameter uint8, port uint16) (err error) {
+// The interrupt defines the duration after a connection gets kicked, zero means infinity.
+func (listener *Listener) Start(parameter uint8, port uint16, interrupt time.Duration) (err error) {
 	switch parameter {
-	case TCPConnection: listener.listener, err = net.Listen("tcp", ":"+strconv.Itoa(int(port)))
+	case TCPConnection: listener.listener, err = net.Listen("tcp", ":" + strconv.Itoa(int(port)))
 	case TLSConnection:
 		if listener.TLSConfig == nil { return errors.New("empty tls config") }
-		listener.listener, err = tls.Listen("tcp", ":"+strconv.Itoa(int(port)), listener.TLSConfig)
+		listener.listener, err = tls.Listen("tcp", ":" + strconv.Itoa(int(port)), listener.TLSConfig)
 	}
 	if err != nil { return err }
 	defer listener.listener.Close()
-	for { conn, err := listener.listener.Accept(); if err != nil { return err }; go listener.receiveMessage(conn) }
+	for {
+		conn, err := listener.listener.Accept()
+		if err != nil { return err }
+		go listener.receiveMessage(conn, interrupt)
+	}
 }
 
 // Cancel stops the listener from accepting new connections and closes any existing ones.
@@ -94,9 +100,15 @@ func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []by
 }
 
 // receiveMessage handles all incoming data for a connection and tracks broken connections.
-func (listener *Listener) receiveMessage(conn net.Conn) {
+func (listener *Listener) receiveMessage(conn net.Conn, interrupt time.Duration) {
 	defer func() { if conn != nil { conn.Close() } }()
 	if listener.Ready != nil && conn != nil { listener.Ready(conn) }
+
+	if interrupt > 0 {
+		deadline := time.Now().Add(interrupt * time.Second); err := conn.SetDeadline(deadline)
+		if err != nil { if listener.Failed != nil { listener.Failed(err) }; return }
+	}
+
 	var frame frame; buffer := make([]byte, maximum)
 	for {
 		size, err := conn.Read(buffer)
