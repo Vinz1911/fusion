@@ -16,6 +16,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"time"
 )
 
 // Predefined constants for identifying connection and message types.
@@ -36,7 +37,7 @@ const (
 // Listener struct represents a TCP based connection listener that handles incoming
 // pure TCP connections or TLS encrypted connections.
 type Listener struct {
-	frame     frame
+	framer     framer
 	listener  net.Listener
 	TLSConfig *tls.Config
 
@@ -47,16 +48,21 @@ type Listener struct {
 
 // Start initiates the listener to start accepting incoming connections on the specified port.
 // The parameter decides whether it's a TCP or TLS connection based on predefined constants.
-func (listener *Listener) Start(parameter uint8, port uint16) (err error) {
+// The interrupt defines the duration after a connection gets kicked, zero means infinity.
+func (listener *Listener) Start(parameter uint8, port uint16, interrupt time.Duration) (err error) {
 	switch parameter {
-	case TCPConnection: listener.listener, err = net.Listen("tcp", ":"+strconv.Itoa(int(port)))
+	case TCPConnection: listener.listener, err = net.Listen("tcp", ":" + strconv.Itoa(int(port)))
 	case TLSConnection:
 		if listener.TLSConfig == nil { return errors.New("empty tls config") }
-		listener.listener, err = tls.Listen("tcp", ":"+strconv.Itoa(int(port)), listener.TLSConfig)
+		listener.listener, err = tls.Listen("tcp", ":" + strconv.Itoa(int(port)), listener.TLSConfig)
 	}
 	if err != nil { return err }
 	defer listener.listener.Close()
-	for { conn, err := listener.listener.Accept(); if err != nil { return err }; go listener.receiveMessage(conn) }
+	for {
+		conn, err := listener.listener.Accept()
+		if err != nil { return err }
+		go listener.receiveMessage(conn, interrupt)
+	}
 }
 
 // Cancel stops the listener from accepting new connections and closes any existing ones.
@@ -75,7 +81,7 @@ func (listener *Listener) SendMessage(conn net.Conn, messageType uint8, data []b
 // processingSend is a helper function to create and send a message frame over a connection.
 func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint8) {
 	if listener.listener == nil { return }
-	message, err := listener.frame.create(data, opcode)
+	message, err := listener.framer.create(data, opcode)
 	if err != nil {
 		if listener.Failed != nil { listener.Failed(err) }
 		if conn != nil { err = conn.Close() }; return
@@ -85,23 +91,29 @@ func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint
 }
 
 // processingParse is a helper function to parse a message frame from the connection data.
-func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []byte) error {
+func (listener *Listener) processingParse(conn net.Conn, framer *framer, data []byte) error {
 	if listener.listener == nil { return errors.New("parsing failed") }
-	err := frame.parse(data, func(data []byte, opcode uint8) {
+	err := framer.parse(data, func(data []byte, opcode uint8) {
 		if listener.Message != nil { listener.Message(conn, data, opcode) }
 		if opcode == pingMessage { listener.processingSend(conn, data, pingMessage) }
 	}); return err
 }
 
 // receiveMessage handles all incoming data for a connection and tracks broken connections.
-func (listener *Listener) receiveMessage(conn net.Conn) {
+func (listener *Listener) receiveMessage(conn net.Conn, interrupt time.Duration) {
 	defer func() { if conn != nil { conn.Close() } }()
 	if listener.Ready != nil && conn != nil { listener.Ready(conn) }
-	var frame frame; buffer := make([]byte, maximum)
+
+	if interrupt > 0 {
+		deadline := time.Now().Add(interrupt * time.Second); err := conn.SetDeadline(deadline)
+		if err != nil { if listener.Failed != nil { listener.Failed(err) }; return }
+	}
+
+	var framer framer; buffer := make([]byte, maximum)
 	for {
 		size, err := conn.Read(buffer)
 		if err != nil { if err != io.EOF && listener.Failed != nil { listener.Failed(err) }; break }
-		err = listener.processingParse(conn, &frame, buffer[:size])
+		err = listener.processingParse(conn, &framer, buffer[:size])
 		if err != nil { if listener.Failed != nil { listener.Failed(err) }; break }
 	}
 }
