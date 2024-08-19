@@ -37,7 +37,7 @@ const (
 // Listener struct represents a TCP based connection listener that handles incoming
 // pure TCP connections or TLS encrypted connections.
 type Listener struct {
-	frame     frame
+	framer     framer
 	listener  net.Listener
 	TLSConfig *tls.Config
 
@@ -81,7 +81,7 @@ func (listener *Listener) SendMessage(conn net.Conn, messageType uint8, data []b
 // processingSend is a helper function to create and send a message frame over a connection.
 func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint8) {
 	if listener.listener == nil { return }
-	message, err := listener.frame.create(data, opcode)
+	message, err := listener.framer.create(data, opcode)
 	if err != nil {
 		if listener.Failed != nil { listener.Failed(err) }
 		if conn != nil { err = conn.Close() }; return
@@ -91,9 +91,9 @@ func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint
 }
 
 // processingParse is a helper function to parse a message frame from the connection data.
-func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []byte) error {
+func (listener *Listener) processingParse(conn net.Conn, framer *framer, data []byte) error {
 	if listener.listener == nil { return errors.New("parsing failed") }
-	err := frame.parse(data, func(data []byte, opcode uint8) {
+	err := framer.parse(data, func(data []byte, opcode uint8) {
 		if listener.Message != nil { listener.Message(conn, data, opcode) }
 		if opcode == pingMessage { listener.processingSend(conn, data, pingMessage) }
 	}); return err
@@ -109,11 +109,11 @@ func (listener *Listener) receiveMessage(conn net.Conn, interrupt time.Duration)
 		if err != nil { if listener.Failed != nil { listener.Failed(err) }; return }
 	}
 
-	var frame frame; buffer := make([]byte, maximum)
+	var framer framer; buffer := make([]byte, maximum)
 	for {
 		size, err := conn.Read(buffer)
 		if err != nil { if err != io.EOF && listener.Failed != nil { listener.Failed(err) }; break }
-		err = listener.processingParse(conn, &frame, buffer[:size])
+		err = listener.processingParse(conn, &framer, buffer[:size])
 		if err != nil { if listener.Failed != nil { listener.Failed(err) }; break }
 	}
 }
