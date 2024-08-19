@@ -1,10 +1,14 @@
-// Package main
+//  Fusion
+//
+//  Created by Vinzenz Weist on 17.06.21.
+//  Copyright © 2021 Vinzenz Weist. All rights reserved.
+//
 
-// Copyright 2021 Vinzenz Weist. All rights reserved.
-// Use of this source code is risked by yourself.
-// license that can be found in the LICENSE file.
-
-package main
+// Package network encapsulates the logic required to set up network connections
+// and communication, including TCP and TLS encrypted connections, along with handling
+// different types of messages such as text and binary.
+// It uses the fusion network protocol to ensuring reliability and structure.
+package network
 
 import (
 	"crypto/tls"
@@ -12,117 +16,104 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"time"
 )
 
+// Predefined constants for identifying connection and message types.
 const (
 	TCPConnection uint8 = 0x0
 	TLSConnection uint8 = 0x1
 
 	TextMessage   uint8 = 0x1
 	BinaryMessage uint8 = 0x2
-	PingMessage   uint8 = 0x3
 )
 
-// Listener is a tcp based connection listener
-// this is for handling incoming pure tcp connections
+// Private predefined constant for the maximum buffer size and pingMessage.
+const (
+	maximum     uint32 = 0x8000
+	pingMessage uint8  = 0x3
+)
+
+// Listener struct represents a TCP based connection listener that handles incoming
+// pure TCP connections or TLS encrypted connections.
 type Listener struct {
-	frame    frame
-	listener net.Listener
+	framer     framer
+	listener  net.Listener
+	TLSConfig *tls.Config
 
-	Cert string
-	Key  string
-
-	Ready     func(conn net.Conn)
-	Message   func(conn net.Conn, text *string, binary []byte)
-	Failed    func(conn net.Conn, err error)
-	Cancelled func(conn net.Conn)
+	Ready   func(conn net.Conn)
+	Message func(conn net.Conn, data []byte, opcode uint8)
+	Failed  func(err error)
 }
 
-// Start the NetworkGO connection listener
-// waits for incoming connections
-func (listener *Listener) Start(parameter uint8, port uint16) error {
+// Start initiates the listener to start accepting incoming connections on the specified port.
+// The parameter decides whether it's a TCP or TLS connection based on predefined constants.
+// The interrupt defines the duration after a connection gets kicked, zero means infinity.
+func (listener *Listener) Start(parameter uint8, port uint16, interrupt time.Duration) (err error) {
 	switch parameter {
-	case TCPConnection:
-		var err error
-		listener.listener, err = net.Listen("tcp", ":" + strconv.Itoa(int(port)))
-		if err != nil { return err }
+	case TCPConnection: listener.listener, err = net.Listen("tcp", ":" + strconv.Itoa(int(port)))
 	case TLSConnection:
-		var cer, err = tls.LoadX509KeyPair(listener.Cert, listener.Key)
-		if err != nil { return err }
-		var config = &tls.Config{Certificates: []tls.Certificate{cer}}
-		listener.listener, err = tls.Listen("tcp", ":" + strconv.Itoa(int(port)), config)
-		if err != nil { return err }
+		if listener.TLSConfig == nil { return errors.New("empty tls config") }
+		listener.listener, err = tls.Listen("tcp", ":" + strconv.Itoa(int(port)), listener.TLSConfig)
 	}
+	if err != nil { return err }
 	defer listener.listener.Close()
 	for {
-		var conn, err = listener.listener.Accept()
+		conn, err := listener.listener.Accept()
 		if err != nil { return err }
-		go listener.receiveMessage(conn)
+		go listener.receiveMessage(conn, interrupt)
 	}
 }
 
-// Cancel closes all connections and stops
-// the listener from accepting new connections
+// Cancel stops the listener from accepting new connections and closes any existing ones.
 func (listener *Listener) Cancel() {
-	if listener.listener == nil { return }
-	var err = listener.listener.Close()
-	if err != nil { listener.Failed(nil, err) }
-	listener.listener = nil
+	if listener.listener != nil {
+		err := listener.listener.Close()
+		if err != nil && listener.Failed != nil { listener.Failed(err) }
+	}; listener.listener = nil
 }
 
-// SendTextMessage is for sending a text based message
-func (listener *Listener) SendTextMessage(conn net.Conn, str string) {
-	listener.processingSend(conn, []byte(str), TextMessage)
+// SendMessage sends a message through the specified connection.
+func (listener *Listener) SendMessage(conn net.Conn, messageType uint8, data []byte) {
+	listener.processingSend(conn, data, messageType)
 }
 
-// SendBinaryMessage is for sending a text based message
-func (listener *Listener) SendBinaryMessage(conn net.Conn, data []byte) {
-	listener.processingSend(conn, data, BinaryMessage)
-}
-
-/// MARK: - Private API
-
-// create and send message frame
+// processingSend is a helper function to create and send a message frame over a connection.
 func (listener *Listener) processingSend(conn net.Conn, data []byte, opcode uint8) {
 	if listener.listener == nil { return }
-	var message, err = listener.frame.create(data, opcode)
-	if err != nil { listener.Failed(conn, err); listener.remove(conn) }
+	message, err := listener.framer.create(data, opcode)
+	if err != nil {
+		if listener.Failed != nil { listener.Failed(err) }
+		if conn != nil { err = conn.Close() }; return
+	}
 	_, err = conn.Write(message)
-	if err != nil { listener.Failed(conn, err) }
+	if err != nil && listener.Failed != nil { listener.Failed(err) }
 }
 
-// parse a message frame
-func (listener *Listener) processingParse(conn net.Conn, frame *frame, data []byte) error {
-	if listener.listener == nil { return errors.New(parsingFailed) }
-	var err = frame.parse(data, func(text *string, data []byte, ping []byte) {
-		listener.Message(conn, text, data)
-		if ping != nil { listener.sendPong(conn, ping) }
-	})
-	return err
+// processingParse is a helper function to parse a message frame from the connection data.
+func (listener *Listener) processingParse(conn net.Conn, framer *framer, data []byte) error {
+	if listener.listener == nil { return errors.New("parsing failed") }
+	err := framer.parse(data, func(data []byte, opcode uint8) {
+		if listener.Message != nil { listener.Message(conn, data, opcode) }
+		if opcode == pingMessage { listener.processingSend(conn, data, pingMessage) }
+	}); return err
 }
 
-// remove is for terminating a specific connection
-func (listener *Listener) remove(conn net.Conn) {
-	var err = conn.Close()
-	if err != nil { listener.Failed(conn, err) }
-	listener.Cancelled(conn)
-}
+// receiveMessage handles all incoming data for a connection and tracks broken connections.
+func (listener *Listener) receiveMessage(conn net.Conn, interrupt time.Duration) {
+	defer func() { if conn != nil { conn.Close() } }()
+	if listener.Ready != nil && conn != nil { listener.Ready(conn) }
 
-// sendPong is for sending a pong based message
-func (listener *Listener) sendPong(conn net.Conn, data []byte) {
-	listener.processingSend(conn, data, PingMessage)
-}
+	if interrupt > 0 {
+		deadline := time.Now().Add(interrupt * time.Second); err := conn.SetDeadline(deadline)
+		if err != nil { if listener.Failed != nil { listener.Failed(err) }; return }
+	}
 
-// receiveMessage is handling all incoming input
-// keeps track broken connections
-func (listener *Listener) receiveMessage(conn net.Conn) {
-	var frame = frame{}
-	listener.Ready(conn)
-	var buffer = make([]byte, 0x2000)
+	var framer framer; buffer := make([]byte, maximum)
 	for {
-		var size, err = conn.Read(buffer)
-		if err != nil { if err == io.EOF { listener.Cancelled(conn) } else { listener.Failed(conn, err) }; break }
-		err = listener.processingParse(conn, &frame, buffer[:size])
-		if err != nil { listener.Failed(conn, err); listener.remove(conn); break }
+		size, err := conn.Read(buffer)
+		if err != nil { if err != io.EOF && listener.Failed != nil { listener.Failed(err) }; break }
+		err = listener.processingParse(conn, &framer, buffer[:size])
+		if err != nil { if listener.Failed != nil { listener.Failed(err) }; break }
 	}
 }
